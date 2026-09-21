@@ -1,0 +1,25 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dashboard",
+      "runtimeExecutable": "mix",
+      "runtimeArgs": [
+        "phx.server"
+      ],
+      "port": 4000
+    },
+    {
+      "name": "static",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "4101",
+        "-d",
+        "tmp"
+      ],
+      "port": 4101
+    }
+  ]
+}
