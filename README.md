@@ -12,7 +12,7 @@ mix phx.server
 Then open [http://localhost:4000](http://localhost:4000). The first visit
 shows a waiting page while the initial collection runs; it reloads itself when
 the report is ready. After that the page has a **Refresh** button, and the
-service collects again every 24 hours on its own.
+service collects again on its own, on the hour from 05:00 to 20:00 local time.
 
 ## What it reports
 
@@ -96,14 +96,14 @@ at start-up:
 |---|---|---|
 | `PORT` | `4000` | HTTP port |
 | `DASHBOARD_DATA_DIR` | `~/.cache/dashboard` | where `data.json` and the GitHub and hex ETag caches are kept |
-| `DASHBOARD_REFRESH_HOURS` | `24` | hours between automatic collections |
+| `DASHBOARD_SCHEDULE` | `5-20` | when to collect: on the hour within that window of local hours, or `every 90m` / `every 6h` |
 | `DASHBOARD_PROJECTS` | `priv/projects.exs` | the registry file to read |
 | `GITHUB_DASHBOARD_TOKEN` | — | GitHub token; `GITHUB_TOKEN` and `GH_TOKEN` are also accepted |
 | `SECRET_KEY_BASE`, `PHX_HOST`, `PHX_SERVER` | — | the usual Phoenix release settings, production only |
 
 The last successful report is persisted to `data.json` in the data directory,
-so a restarted service serves it immediately and only collects again when it
-is older than the refresh interval.
+so a restarted service serves it immediately and only collects again if a
+scheduled slot has passed since the report was made.
 
 To build a release:
 

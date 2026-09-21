@@ -2,10 +2,12 @@ defmodule Dashboard.Store do
   @moduledoc """
   Holds the most recent report and keeps it fresh.
 
-  The store collects once at start-up, unless a report persisted by a previous
-  run is still younger than the refresh interval, and then again every
-  `:refresh_interval` (24 hours by default). `refresh/0` starts a collection
-  on demand; a collection already in flight is reused rather than duplicated.
+  The store collects on a schedule — by default on the hour, every hour from
+  05:00 to 20:00 local time — and on demand through `refresh/0`; a collection
+  already in flight is reused rather than duplicated. At start-up it collects
+  immediately only when a scheduled slot has passed since the persisted
+  report was made (or there is no report); otherwise it waits for the next
+  slot. A plain interval is available instead of the hourly window.
 
   Every successful collection is written to `data.json` under `:data_dir`, so
   a restarted service shows the last report immediately while the next one
@@ -18,9 +20,13 @@ defmodule Dashboard.Store do
   ## Configuration
 
       config :dashboard, Dashboard.Store,
-        refresh_interval: :timer.hours(24),
+        schedule: {:hourly, 5..20},
         data_dir: "~/.cache/dashboard",
         collect_on_start: true
+
+  `:schedule` is `{:hourly, first..last}` (on the hour, within that inclusive
+  window of local hours) or `{:every, milliseconds}`. `:refresh_interval` is
+  accepted as a shorthand for the latter.
 
   Options passed to `start_link/1` take precedence over the application
   environment. `:collector` names the module whose `collect/1` gathers a
@@ -33,7 +39,10 @@ defmodule Dashboard.Store do
 
   @topic "dashboard"
   @pubsub Dashboard.PubSub
-  @default_interval :timer.hours(24)
+  @default_schedule {:hourly, 5..20}
+
+  @typedoc "When to collect: hourly within a window of local hours, or every so many milliseconds."
+  @type schedule :: {:hourly, Range.t()} | {:every, pos_integer()}
 
   defstruct report: nil,
             json: nil,
@@ -44,7 +53,7 @@ defmodule Dashboard.Store do
             next_refresh_at: nil,
             last_error: nil,
             last_duration_ms: nil,
-            interval: @default_interval,
+            schedule: @default_schedule,
             data_dir: nil,
             collect_on_start: true,
             collector: Dashboard.Collector,
@@ -57,7 +66,7 @@ defmodule Dashboard.Store do
           next_refresh_at: String.t() | nil,
           last_error: String.t() | nil,
           last_duration_ms: non_neg_integer() | nil,
-          refresh_interval_ms: pos_integer(),
+          schedule: String.t(),
           data_dir: Path.t()
         }
 
@@ -72,8 +81,10 @@ defmodule Dashboard.Store do
 
   * `:name` registers the process. Defaults to `Dashboard.Store`.
 
-  * `:refresh_interval` is the time between collections in milliseconds.
-    Defaults to 24 hours.
+  * `:schedule` is a `t:schedule/0`. Defaults to `{:hourly, 5..20}`.
+
+  * `:refresh_interval`, in milliseconds, is a shorthand for
+    `schedule: {:every, milliseconds}` and takes precedence over `:schedule`.
 
   * `:data_dir` is where `data.json` and the GitHub cache are written.
     Defaults to `~/.cache/dashboard`.
@@ -176,7 +187,7 @@ defmodule Dashboard.Store do
     options = Keyword.merge(Application.get_env(:dashboard, __MODULE__, []), options)
 
     state = %__MODULE__{
-      interval: Keyword.get(options, :refresh_interval, @default_interval),
+      schedule: schedule_option(options),
       data_dir: Path.expand(Keyword.get(options, :data_dir) || default_data_dir()),
       collect_on_start: Keyword.get(options, :collect_on_start, true),
       collector: Keyword.get(options, :collector, Dashboard.Collector),
@@ -186,16 +197,101 @@ defmodule Dashboard.Store do
     {:ok, load_persisted(state), {:continue, :schedule}}
   end
 
+  # An explicit :refresh_interval wins over :schedule, so a caller (or a
+  # test) asking for a plain interval gets one whatever the application
+  # environment says.
+  defp schedule_option(options) do
+    case {Keyword.get(options, :refresh_interval), Keyword.get(options, :schedule)} do
+      {ms, _} when is_integer(ms) and ms > 0 -> {:every, ms}
+      {_, {:hourly, %Range{}} = schedule} -> schedule
+      {_, {:every, ms}} when is_integer(ms) and ms > 0 -> {:every, ms}
+      _ -> @default_schedule
+    end
+  end
+
   @impl true
   def handle_continue(:schedule, state) do
-    age =
-      state.generated_at && DateTime.diff(DateTime.utc_now(), state.generated_at, :millisecond)
-
     cond do
-      age && age < state.interval -> {:noreply, schedule(state, state.interval - age)}
+      not due?(state) -> {:noreply, schedule(state, next_delay(state.schedule))}
       state.collect_on_start -> {:noreply, start_collection(state)}
-      true -> {:noreply, schedule(state, state.interval)}
+      true -> {:noreply, schedule(state, next_delay(state.schedule))}
     end
+  end
+
+  # Has a collection been missed? For an interval: the report is older than
+  # it. For the hourly window: the most recent slot is later than the report.
+  defp due?(%{generated_at: nil}), do: true
+
+  defp due?(%{schedule: {:every, ms}, generated_at: generated_at}) do
+    DateTime.diff(DateTime.utc_now(), generated_at, :millisecond) >= ms
+  end
+
+  defp due?(%{schedule: {:hourly, hours}, generated_at: generated_at}) do
+    slot = last_slot(hours, NaiveDateTime.local_now())
+    NaiveDateTime.compare(slot, local(generated_at)) == :gt
+  end
+
+  defp local(%DateTime{} = datetime) do
+    # Local wall-clock time of a UTC instant, via the OS's offset for now.
+    offset = NaiveDateTime.diff(NaiveDateTime.local_now(), NaiveDateTime.utc_now(), :second)
+    datetime |> DateTime.to_naive() |> NaiveDateTime.add(offset, :second)
+  end
+
+  @doc """
+  Milliseconds until the next scheduled collection.
+
+  ### Arguments
+
+  * `schedule` is a `t:schedule/0`.
+
+  * `now` is the local wall-clock time to count from; defaults to now.
+
+  ### Returns
+
+  * A non-negative integer.
+
+  ### Examples
+
+      iex> Dashboard.Store.next_delay({:hourly, 5..20}, ~N[2026-09-21 09:15:00])
+      2_700_000
+
+      iex> Dashboard.Store.next_delay({:hourly, 5..20}, ~N[2026-09-21 20:00:00])
+      32_400_000
+
+      iex> Dashboard.Store.next_delay({:hourly, 5..20}, ~N[2026-09-21 03:59:59])
+      3_601_000
+
+      iex> Dashboard.Store.next_delay({:every, 60_000}, ~N[2026-09-21 09:15:00])
+      60_000
+
+  """
+  @spec next_delay(schedule(), NaiveDateTime.t()) :: non_neg_integer()
+  def next_delay(schedule, now \\ NaiveDateTime.local_now())
+  def next_delay({:every, ms}, _now), do: ms
+
+  def next_delay({:hourly, hours}, now) do
+    max(NaiveDateTime.diff(next_slot(hours, now), now, :millisecond), 0)
+  end
+
+  # The first on-the-hour slot inside the window strictly after `now`, or the
+  # window's first hour tomorrow.
+  defp next_slot(first..last//_ = _hours, now) do
+    today = NaiveDateTime.to_date(now)
+
+    Enum.find_value(first..last//1, fn hour ->
+      slot = NaiveDateTime.new!(today, Time.new!(hour, 0, 0))
+      if NaiveDateTime.compare(slot, now) == :gt, do: slot
+    end) || NaiveDateTime.new!(Date.add(today, 1), Time.new!(first, 0, 0))
+  end
+
+  # The most recent slot at or before `now`: today's, or yesterday's last.
+  defp last_slot(first..last//_ = _hours, now) do
+    today = NaiveDateTime.to_date(now)
+
+    first..last//1
+    |> Enum.map(&NaiveDateTime.new!(today, Time.new!(&1, 0, 0)))
+    |> Enum.filter(&(NaiveDateTime.compare(&1, now) != :gt))
+    |> List.last() || NaiveDateTime.new!(Date.add(today, -1), Time.new!(last, 0, 0))
   end
 
   @impl true
@@ -287,7 +383,7 @@ defmodule Dashboard.Store do
       "dashboard: collected #{normalised["totals"]["repos"]} repositories in #{div(duration, 1000)}s"
     )
 
-    state = schedule(state, state.interval)
+    state = schedule(state, next_delay(state.schedule))
     broadcast(:refreshed, state)
     state
   rescue
@@ -308,7 +404,7 @@ defmodule Dashboard.Store do
         collecting_since: nil
     }
 
-    state = schedule(state, state.interval)
+    state = schedule(state, next_delay(state.schedule))
     broadcast(:refresh_failed, state)
     state
   end
@@ -401,10 +497,17 @@ defmodule Dashboard.Store do
       next_refresh_at: state.next_refresh_at && DateTime.to_iso8601(state.next_refresh_at),
       last_error: state.last_error,
       last_duration_ms: state.last_duration_ms,
-      refresh_interval_ms: state.interval,
+      schedule: describe_schedule(state.schedule),
       data_dir: state.data_dir
     }
   end
+
+  defp describe_schedule({:hourly, first..last//_}),
+    do: "hourly, #{pad(first)}:00 to #{pad(last)}:00 local time"
+
+  defp describe_schedule({:every, ms}), do: "every #{div(ms, 60_000)} minutes"
+
+  defp pad(hour), do: hour |> Integer.to_string() |> String.pad_leading(2, "0")
 
   defp broadcast(event, state) do
     Phoenix.PubSub.broadcast(@pubsub, @topic, {:dashboard, event, status_of(state)})

@@ -48,12 +48,12 @@ defmodule DashboardWeb.DashboardControllerTest do
              "ready" => true,
              "refreshing" => false,
              "generated_at" => generated,
-             "refresh_interval_ms" => interval
+             "schedule" => schedule
            } =
              json_response(conn, 200)
 
     assert is_binary(generated)
-    assert is_integer(interval)
+    assert schedule =~ "hourly"
   end
 
   test "POST /refresh starts a collection and answers 202", %{conn: conn} do

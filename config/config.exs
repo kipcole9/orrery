@@ -54,8 +54,9 @@ config :phoenix, :json_library, JSON
 # of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"
 
-# The store collects every :refresh_interval and persists the report under
-# :data_dir. Both can be overridden at runtime; see config/runtime.exs.
+# The store collects on the hour from 05:00 to 20:00 local time and persists
+# the report under :data_dir. Both can be overridden at runtime; see
+# config/runtime.exs.
 config :dashboard, Dashboard.Store,
-  refresh_interval: :timer.hours(24),
+  schedule: {:hourly, 5..20},
   collect_on_start: true

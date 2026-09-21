@@ -177,3 +177,18 @@ defmodule Dashboard.StoreTest do
     assert_receive {:dashboard, :refreshed, _}, 1_000
   end
 end
+
+defmodule Dashboard.StoreScheduleTest do
+  use ExUnit.Case, async: true
+
+  doctest Dashboard.Store
+
+  test "the hourly window wraps to the next morning and never goes negative" do
+    assert Dashboard.Store.next_delay({:hourly, 5..20}, ~N[2026-09-21 20:30:00]) ==
+             8 * 3_600_000 + 1_800_000
+
+    assert Dashboard.Store.next_delay({:hourly, 5..20}, ~N[2026-09-21 05:00:00]) == 3_600_000
+    assert Dashboard.Store.next_delay({:hourly, 5..20}, ~N[2026-09-21 04:59:59]) == 1_000
+    assert Dashboard.Store.next_delay({:hourly, 0..23}, ~N[2026-09-21 23:30:00]) == 1_800_000
+  end
+end

@@ -27,14 +27,34 @@ config :dashboard, DashboardWeb.Endpoint,
 # which registry file to read. The GitHub token itself is read by
 # Dashboard.GitHub from GITHUB_DASHBOARD_TOKEN, GITHUB_TOKEN or GH_TOKEN.
 if config_env() != :test do
-  refresh_hours =
-    case Integer.parse(System.get_env("DASHBOARD_REFRESH_HOURS", "24")) do
-      {hours, ""} when hours > 0 -> hours
-      _ -> 24
+  # DASHBOARD_SCHEDULE is "5-20" (on the hour, within that window of local
+  # hours) or "every 90m" / "every 6h". Anything else keeps the default.
+  schedule =
+    case System.get_env("DASHBOARD_SCHEDULE", "5-20") do
+      value ->
+        cond do
+          match = Regex.run(~r/^\s*(\d{1,2})\s*-\s*(\d{1,2})\s*$/, value) ->
+            [_, first, last] = match
+            {first, last} = {String.to_integer(first), String.to_integer(last)}
+
+            if first in 0..23 and last in first..23,
+              do: {:hourly, first..last},
+              else: {:hourly, 5..20}
+
+          match = Regex.run(~r/^\s*every\s+(\d+)\s*([mh])\s*$/i, value) ->
+            [_, n, unit] = match
+            n = String.to_integer(n)
+
+            {:every,
+             if(String.downcase(unit) == "h", do: :timer.hours(n), else: :timer.minutes(n))}
+
+          true ->
+            {:hourly, 5..20}
+        end
     end
 
   config :dashboard, Dashboard.Store,
-    refresh_interval: :timer.hours(refresh_hours),
+    schedule: schedule,
     data_dir: System.get_env("DASHBOARD_DATA_DIR") || Dashboard.Store.default_data_dir()
 
   if projects_file = System.get_env("DASHBOARD_PROJECTS") do
