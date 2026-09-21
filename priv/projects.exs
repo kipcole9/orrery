@@ -48,7 +48,7 @@
       name: "Other",
       dir: ".",
       blurb: "Repositories that do not belong to a project",
-      repos: ["astro", "url"]
+      repos: ["astro", "url", "dashboard"]
     }
   ],
 
