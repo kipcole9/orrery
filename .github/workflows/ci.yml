@@ -23,7 +23,7 @@ jobs:
         include:
           # This is an application, not a library: it targets the maintainer's
           # toolchain only. Earlier Elixir and OTP releases are not supported.
-          - elixir: "1.20.2-otp-29"
+          - elixir: "1.20.4-otp-29"
             otp: "29"
             lint: true
 
