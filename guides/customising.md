@@ -20,7 +20,7 @@ It reads. It never writes to a repository: no fetch, no checkout, no commit. The
 
 ## Quick start
 
-```sh
+```bash
 mix setup
 ORRERY_GITHUB_TOKEN=... mix phx.server
 ```
@@ -29,7 +29,7 @@ Open <http://localhost:4000>. The first visit shows a waiting page while the fir
 
 To produce a static page instead of running a server:
 
-```sh
+```bash
 mix orrery.collect --open
 ```
 
@@ -158,7 +158,7 @@ The store (`Orrery.Store`) persists every successful report to `data.json`. On s
 
 ## Running as a service
 
-```sh
+```bash
 MIX_ENV=prod mix assets.deploy
 MIX_ENV=prod mix release
 PHX_SERVER=true SECRET_KEY_BASE=$(mix phx.gen.secret) \

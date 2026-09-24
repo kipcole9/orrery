@@ -30,7 +30,7 @@ Orrery requires **Elixir 1.20+** and **Erlang/OTP 27+**. Earlier Elixir releases
 
 Orrery is an application, not a library. Clone it and fetch its dependencies:
 
-```sh
+```bash
 git clone https://github.com/kipcole9/orrery.git
 cd orrery
 mix setup
@@ -55,7 +55,7 @@ Each entry in `groups` is a project: every git working tree inside its `dir` is 
 
 Then start the server with a GitHub token in the environment:
 
-```sh
+```bash
 ORRERY_GITHUB_TOKEN=<token> mix phx.server
 ```
 
@@ -92,7 +92,7 @@ The [customising guide](guides/customising.md) describes each format in full, an
 
 ## Running as a service
 
-```sh
+```bash
 MIX_ENV=prod mix assets.deploy
 MIX_ENV=prod mix release
 PHX_SERVER=true SECRET_KEY_BASE=$(mix phx.gen.secret) ORRERY_GITHUB_TOKEN=<token> \
@@ -117,7 +117,7 @@ Elixir code in the same VM can call `Orrery.Store.subscribe/0` to receive `{:orr
 
 The same report can be produced without the server:
 
-```sh
+```bash
 mix orrery.collect --open
 ```
 
@@ -135,7 +135,7 @@ It writes `data.json` and a self-contained `orrery.html`. The options are:
 
 ## Development
 
-```sh
+```bash
 mix test
 mix format
 mix dialyzer
