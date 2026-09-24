@@ -1,4 +1,4 @@
-# Project dashboard
+# Orrery
 
 Release status, open issues and plan progress across the open source projects
 in `~/Development`, served as a small Phoenix application that collects
@@ -13,6 +13,10 @@ Then open [http://localhost:4000](http://localhost:4000). The first visit
 shows a waiting page while the initial collection runs; it reloads itself when
 the report is ready. After that the page has a **Refresh** button, and the
 service collects again on its own, on the hour from 05:00 to 20:00 local time.
+Every row also has a ↻ button that collects just that repository — one
+repository's worth of git commands and GitHub and hex requests — so a fix can
+be checked without a full pass. The view (open rows, filter, search) survives
+the reload that follows.
 
 ## What it reports
 
@@ -66,8 +70,9 @@ active is shown as a badge beside the name, and the "Active" chip filters to
 repositories under development. The status also decides which signals are
 raised: a demo or an application is never nagged about release tags, and a
 library kept for bug fixes only is not expected to see commits. A fork or an archived repository — by `STATUS.md` or
-because GitHub says so — is left out of the report altogether and listed under
-`omitted` in `data.json`.
+because GitHub says so and there is no `STATUS.md` to say otherwise — is left
+out of the report altogether and listed under `omitted` in `data.json`. An
+explicit `STATUS.md` is authoritative over what GitHub infers.
 
 **Blockers** come from `**Blocked on:**` lines in the same file, one per thing
 a release is waiting for. A blocker naming a hex package and a version
@@ -95,10 +100,10 @@ at start-up:
 | Variable | Default | Purpose |
 |---|---|---|
 | `PORT` | `4000` | HTTP port |
-| `DASHBOARD_DATA_DIR` | `~/.cache/dashboard` | where `data.json` and the GitHub and hex ETag caches are kept |
-| `DASHBOARD_SCHEDULE` | `5-20` | when to collect: on the hour within that window of local hours, or `every 90m` / `every 6h` |
-| `DASHBOARD_PROJECTS` | `priv/projects.exs` | the registry file to read |
-| `GITHUB_DASHBOARD_TOKEN` | — | GitHub token; `GITHUB_TOKEN` and `GH_TOKEN` are also accepted |
+| `ORRERY_DATA_DIR` | `~/.cache/orrery` | where `data.json` and the GitHub and hex ETag caches are kept |
+| `ORRERY_SCHEDULE` | `5-20` | when to collect: on the hour within that window of local hours, or `every 90m` / `every 6h` |
+| `ORRERY_PROJECTS` | `priv/projects.exs` | the registry file to read |
+| `ORRERY_GITHUB_TOKEN` | — | GitHub token; `GITHUB_TOKEN` and `GH_TOKEN` are also accepted |
 | `SECRET_KEY_BASE`, `PHX_HOST`, `PHX_SERVER` | — | the usual Phoenix release settings, production only |
 
 The last successful report is persisted to `data.json` in the data directory,
@@ -115,7 +120,7 @@ PHX_SERVER=true SECRET_KEY_BASE=$(mix phx.gen.secret) _build/prod/rel/dashboard/
 
 ## The token
 
-Set `GITHUB_DASHBOARD_TOKEN` in your shell — it is already in `~/.zshrc`. Only
+Set `ORRERY_GITHUB_TOKEN` in your shell — it is already in `~/.zshrc`. Only
 `public_repo` scope is needed, and a classic token with no scopes at all works
 for public repositories. The token is read from the environment only and is
 never written to the report, the page or the cache.
@@ -132,11 +137,12 @@ the dashboard says where the gaps are.
 |---|---|
 | `GET /` | the dashboard |
 | `POST /refresh` | start a collection now; answers `202` with the status. Needs the CSRF token the page carries |
+| `POST /refresh` with `repo=<path>` | collect just that repository again and splice it into the report; the page's per-row ↻ buttons use this |
 | `GET /api/status` | `ready`, `refreshing`, `generated_at`, `next_refresh_at`, `last_error`, `last_duration_ms` |
 | `GET /data.json` | the latest report |
 
-Other processes in the VM can subscribe with `Dashboard.Store.subscribe/0` and
-receive `{:dashboard, :refreshed, status}` after each collection.
+Other processes in the VM can subscribe with `Orrery.Store.subscribe/0` and
+receive `{:orrery, :refreshed, status}` after each collection.
 
 ## One-off collection
 
@@ -144,18 +150,22 @@ The report can also be produced without the server, exactly as the original
 script did:
 
 ```
-mix dashboard.collect                 collect everything
-mix dashboard.collect --no-github     do not ask GitHub for issues
-mix dashboard.collect --no-hex        do not ask hex.pm what is published
-mix dashboard.collect --no-remote     do not ask each clone's origin for its HEAD
-mix dashboard.collect --only Tempo    one project; repeatable
-mix dashboard.collect --open          open the dashboard when it is written
-mix dashboard.collect --out DIR       write somewhere other than the data directory
-mix dashboard.collect --quiet         no progress output
+mix orrery.collect                 collect everything
+mix orrery.collect --no-github     do not ask GitHub for issues
+mix orrery.collect --no-hex        do not ask hex.pm what is published
+mix orrery.collect --no-remote     do not ask each clone's origin for its HEAD
+mix orrery.collect --only Tempo    one project; repeatable
+mix orrery.collect --open          open the dashboard when it is written
+mix orrery.collect --out DIR       write somewhere other than the data directory
+mix orrery.collect --quiet         no progress output
 ```
 
-It writes `data.json` and a self-contained `dashboard.html` that opens straight
+It writes `data.json` and a self-contained `orrery.html` that opens straight
 from disk with no server. The static page has no refresh button.
+
+For a complete walk-through of configuring the dashboard for your own
+repositories, written so a coding assistant can follow it, see
+[guides/customising.md](guides/customising.md).
 
 ## Adding a project
 
@@ -185,19 +195,19 @@ theme follows the system and can be pinned light or dark.
 ## Layout
 
 ```
-lib/dashboard/projects.ex     the registry: which projects and repositories are covered
-lib/dashboard/store.ex        holds the latest report; 24-hour and on-demand refresh
-lib/dashboard/collector.ex    orchestration and derived metrics
-lib/dashboard/git.ex          clone state, project version, release state
-lib/dashboard/changelog.ex    CHANGELOG parsing
-lib/dashboard/plans.ex        plan-document parsing
-lib/dashboard/status.ex       STATUS.md parsing
-lib/dashboard/github.ex       GitHub REST client
-lib/dashboard/hex.ex          hex.pm client
-lib/dashboard/http.ex         the HTTP transport and ETag cache both clients share
-lib/dashboard_web/            the Phoenix endpoint, router and controller
-  controllers/dashboard_html/index.html.heex   the page, with the report inlined
-lib/mix/tasks/                mix dashboard.collect
+lib/orrery/projects.ex     the registry: which projects and repositories are covered
+lib/orrery/store.ex        holds the latest report; 24-hour and on-demand refresh
+lib/orrery/collector.ex    orchestration and derived metrics
+lib/orrery/git.ex          clone state, project version, release state
+lib/orrery/changelog.ex    CHANGELOG parsing
+lib/orrery/plans.ex        plan-document parsing
+lib/orrery/status.ex       STATUS.md parsing
+lib/orrery/github.ex       GitHub REST client
+lib/orrery/hex.ex          hex.pm client
+lib/orrery/http.ex         the HTTP transport and ETag cache both clients share
+lib/orrery_web/            the Phoenix endpoint, router and controller
+  controllers/orrery_html/index.html.heex   the page, with the report inlined
+lib/mix/tasks/                mix orrery.collect
 priv/projects.exs             the registry file
 ```
 

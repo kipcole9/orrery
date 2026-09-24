@@ -17,20 +17,20 @@ import Config
 # Alternatively, you can use `mix phx.gen.release` to generate a `bin/server`
 # script that automatically sets the env var above.
 if System.get_env("PHX_SERVER") do
-  config :dashboard, DashboardWeb.Endpoint, server: true
+  config :orrery, OrreryWeb.Endpoint, server: true
 end
 
-config :dashboard, DashboardWeb.Endpoint,
+config :orrery, OrreryWeb.Endpoint,
   http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 
 # Where reports and the GitHub ETag cache are kept, how often to collect, and
 # which registry file to read. The GitHub token itself is read by
-# Dashboard.GitHub from GITHUB_DASHBOARD_TOKEN, GITHUB_TOKEN or GH_TOKEN.
+# Orrery.GitHub from ORRERY_GITHUB_TOKEN, GITHUB_TOKEN or GH_TOKEN.
 if config_env() != :test do
-  # DASHBOARD_SCHEDULE is "5-20" (on the hour, within that window of local
+  # ORRERY_SCHEDULE is "5-20" (on the hour, within that window of local
   # hours) or "every 90m" / "every 6h". Anything else keeps the default.
   schedule =
-    case System.get_env("DASHBOARD_SCHEDULE", "5-20") do
+    case System.get_env("ORRERY_SCHEDULE", "5-20") do
       value ->
         cond do
           match = Regex.run(~r/^\s*(\d{1,2})\s*-\s*(\d{1,2})\s*$/, value) ->
@@ -53,12 +53,12 @@ if config_env() != :test do
         end
     end
 
-  config :dashboard, Dashboard.Store,
+  config :orrery, Orrery.Store,
     schedule: schedule,
-    data_dir: System.get_env("DASHBOARD_DATA_DIR") || Dashboard.Store.default_data_dir()
+    data_dir: System.get_env("ORRERY_DATA_DIR") || Orrery.Store.default_data_dir()
 
-  if projects_file = System.get_env("DASHBOARD_PROJECTS") do
-    config :dashboard, projects_file: projects_file
+  if projects_file = System.get_env("ORRERY_PROJECTS") do
+    config :orrery, projects_file: projects_file
   end
 end
 
@@ -77,9 +77,9 @@ if config_env() == :prod do
 
   host = System.get_env("PHX_HOST") || "example.com"
 
-  config :dashboard, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
+  config :orrery, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
-  config :dashboard, DashboardWeb.Endpoint,
+  config :orrery, OrreryWeb.Endpoint,
     url: [host: host, port: 443, scheme: "https"],
     http: [
       # Enable IPv6 and bind on all interfaces.
@@ -95,7 +95,7 @@ if config_env() == :prod do
   # To get SSL working, you will need to add the `https` key
   # to your endpoint configuration:
   #
-  #     config :dashboard, DashboardWeb.Endpoint,
+  #     config :orrery, OrreryWeb.Endpoint,
   #       https: [
   #         ...,
   #         port: 443,
@@ -117,7 +117,7 @@ if config_env() == :prod do
   # We also recommend setting `force_ssl` in your config/prod.exs,
   # ensuring no data is ever sent via http, always redirecting to https:
   #
-  #     config :dashboard, DashboardWeb.Endpoint,
+  #     config :orrery, OrreryWeb.Endpoint,
   #       force_ssl: [hsts: true]
   #
   # Check `Plug.SSL` for all available options in `force_ssl`.

@@ -23,7 +23,7 @@ erl_crash.dump
 /tmp/
 
 # Ignore package tarball (built via "mix hex.build").
-dashboard-*.tar
+orrery-*.tar
 
 # Ignore assets that are produced by build tools.
 /priv/static/assets/
@@ -37,7 +37,7 @@ npm-debug.log
 
 # Regenerated on every run.
 data.json
-dashboard.html
+orrery.html
 
 # GitHub ETag cache. Safe to delete; it only costs rate limit to rebuild.
 .cache/

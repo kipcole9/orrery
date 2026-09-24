@@ -2,7 +2,7 @@ import Config
 
 # We don't run a server during test. If one is required,
 # you can enable the server option below.
-config :dashboard, DashboardWeb.Endpoint,
+config :orrery, OrreryWeb.Endpoint,
   http: [ip: {127, 0, 0, 1}, port: 4002],
   secret_key_base: "uf98ld9CeuznsJptrPyWVEptmZBezDd3CpfgYD2LkmzfQ0f7pJ5jtVYP/LnLUDZc",
   server: false
@@ -23,7 +23,7 @@ config :phoenix,
 
 # Tests start their own stores with stub collectors; the application's store
 # must never collect or touch the real data directory.
-config :dashboard, Dashboard.Store,
+config :orrery, Orrery.Store,
   collect_on_start: false,
-  collector: Dashboard.StubCollector,
+  collector: Orrery.StubCollector,
   data_dir: Path.join(System.tmp_dir!(), "dashboard-test-#{System.pid()}")

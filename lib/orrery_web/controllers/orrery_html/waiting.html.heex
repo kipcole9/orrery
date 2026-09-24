@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%2032%2032%22%3E%3Ccircle%20cx=%2216%22%20cy=%2216%22%20r=%2215%22%20fill=%22#0d0d0d%22/%3E%3Ccircle%20cx=%2216%22%20cy=%2216%22%20r=%2211%22%20fill=%22none%22%20stroke=%22#898781%22%20stroke-width=%221.2%22/%3E%3Ccircle%20cx=%2216%22%20cy=%2216%22%20r=%226.5%22%20fill=%22none%22%20stroke=%22#898781%22%20stroke-width=%221.2%22/%3E%3Ccircle%20cx=%2216%22%20cy=%2216%22%20r=%222.2%22%20fill=%22#fab219%22/%3E%3Ccircle%20cx=%2222.5%22%20cy=%2216%22%20r=%221.7%22%20fill=%22#2a78d6%22/%3E%3Ccircle%20cx=%228.2%22%20cy=%228.2%22%20r=%221.7%22%20fill=%22#0ca30c%22/%3E%3C/svg%3E"
+    />
+    <title>Orrery — collecting</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        margin: 0; min-height: 100vh; display: grid; place-items: center;
+        font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+        background: light-dark(#f9f9f7, #16171a); color: light-dark(#1f2328, #e6e7ea);
+      }
+      main { max-width: 32rem; padding: 2rem; text-align: center; }
+      h1 { font-size: 1.25rem; font-weight: 600; margin: 0 0 .5rem; }
+      p { margin: .5rem 0; color: light-dark(#57606a, #a2a8b3); }
+      .error { color: light-dark(#b42318, #ff8d85); }
+      .spinner {
+        width: 1.75rem; height: 1.75rem; margin: 0 auto 1rem; border-radius: 50%;
+        border: 3px solid light-dark(#e0e0dc, #33363c); border-top-color: light-dark(#4b6bfb, #7b93ff);
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="spinner" aria-hidden="true"></div>
+      <h1>Collecting the first report</h1>
+      <p>
+        Reading every repository, changelog and plan, and asking GitHub for open issues. This page reloads when it is ready.
+      </p>
+      <p :if={@status.last_error} class="error">
+        The last collection failed: {@status.last_error}
+      </p>
+    </main>
+    <script>
+      (async function poll() {
+        try {
+          const response = await fetch("/api/status", { headers: { accept: "application/json" } });
+          const status = await response.json();
+          if (status.ready) { location.reload(); return; }
+        } catch (_error) { /* try again */ }
+        setTimeout(poll, 2000);
+      })();
+    </script>
+  </body>
+</html>

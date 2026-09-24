@@ -1,9 +1,9 @@
-defmodule Dashboard.MixProject do
+defmodule Orrery.MixProject do
   use Mix.Project
 
   def project do
     [
-      app: :dashboard,
+      app: :orrery,
       version: "0.1.0",
       elixir: "~> 1.20",
       elixirc_paths: elixirc_paths(Mix.env()),
@@ -21,7 +21,7 @@ defmodule Dashboard.MixProject do
   # Type `mix help compile.app` for more information.
   def application do
     [
-      mod: {Dashboard.Application, []},
+      mod: {Orrery.Application, []},
       extra_applications: [:logger, :runtime_tools, :inets, :ssl]
     ]
   end
@@ -75,10 +75,10 @@ defmodule Dashboard.MixProject do
     [
       setup: ["deps.get", "assets.setup", "assets.build"],
       "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
-      "assets.build": ["compile", "tailwind dashboard", "esbuild dashboard"],
+      "assets.build": ["compile", "tailwind orrery", "esbuild orrery"],
       "assets.deploy": [
-        "tailwind dashboard --minify",
-        "esbuild dashboard --minify",
+        "tailwind orrery --minify",
+        "esbuild orrery --minify",
         "phx.digest"
       ],
       precommit: ["compile --warnings-as-errors", "deps.unlock --unused", "format", "test"]

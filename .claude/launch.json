@@ -2,7 +2,7 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "dashboard",
+      "name": "orrery",
       "runtimeExecutable": "mix",
       "runtimeArgs": [
         "phx.server"

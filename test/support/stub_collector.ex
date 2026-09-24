@@ -1,4 +1,4 @@
-defmodule Dashboard.StubCollector do
+defmodule Orrery.StubCollector do
   @moduledoc """
   A collector that returns a fixed report instantly, for the application's
   store in the test environment and for controller tests.
@@ -20,7 +20,9 @@ defmodule Dashboard.StubCollector do
         }
       ],
       summary: summary(),
-      totals: %{groups: 1, repos: 0}
+      failures: [],
+      omitted: [],
+      totals: %{groups: 1, repos: 0, failed: 0, omitted: 0}
     }
   end
 
@@ -47,9 +49,56 @@ defmodule Dashboard.StubCollector do
 
   @doc "Collects the fixed report."
   def collect(_options), do: {:ok, report()}
+
+  @doc "A minimal repository in the Stub group, as `collect_one/2` would return it."
+  def repo(path) do
+    %{
+      name: Path.basename(path),
+      group: "Stub",
+      path: path,
+      app: Path.basename(path),
+      kind: "elixir",
+      version: "0.1.0",
+      git: nil,
+      release_state: nil,
+      changelog: nil,
+      plans: [],
+      plan_summary: %{
+        documents: 0,
+        tracked: 0,
+        narrative: 0,
+        items: 0,
+        open: 0,
+        done: 0,
+        percent_done: nil
+      },
+      status: nil,
+      status_state: :active,
+      hex: nil,
+      hex_error: nil,
+      version_tag: nil,
+      next_release: nil,
+      remote: nil,
+      github: nil,
+      github_error: nil,
+      owner: nil,
+      repo_url: nil,
+      issue_summary: nil,
+      pull: %{
+        needed: false,
+        reason: nil,
+        behind_upstream: nil,
+        remote_checked: false,
+        remote_behind: nil
+      }
+    }
+  end
+
+  @doc "Collects one stub repository."
+  def collect_one(path, _options), do: {:ok, repo(path)}
 end
 
-defmodule Dashboard.ScriptedCollector do
+defmodule Orrery.ScriptedCollector do
   @moduledoc """
   A collector driven by the test that started it.
 
@@ -63,4 +112,17 @@ defmodule Dashboard.ScriptedCollector do
     if pid = options[:test_pid], do: send(pid, {:collecting, self()})
     options[:reply].()
   end
+
+  @doc "Reports a single-repository collection to the test, then returns a stub repo."
+  def collect_one(path, options) do
+    if pid = options[:test_pid], do: send(pid, {:collecting_one, path, self()})
+    {:ok, Orrery.StubCollector.repo(path)}
+  end
+end
+
+defmodule Orrery.UnknownRepoCollector do
+  @moduledoc "Collects the stub report but knows no individual repository."
+
+  def collect(options), do: Orrery.ScriptedCollector.collect(options)
+  def collect_one(path, _options), do: {:error, {:unknown_repo, path}}
 end
