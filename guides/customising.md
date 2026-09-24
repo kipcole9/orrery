@@ -24,9 +24,12 @@ and the hex.pm API, all read-only.
 
 * Elixir 1.20 or later on OTP 27 or later (`.tool-versions` pins what the
   authors run). Earlier versions are not supported.
+
 * `git` on the `PATH`.
+
 * A GitHub token in the environment (see *GitHub* below). Optional, but
   without one the dashboard is limited to 60 GitHub requests an hour.
+
 * Network access to `api.github.com`, `hex.pm` and your git remotes. Each
   can be switched off (see *Switching sources off*).
 
@@ -63,15 +66,19 @@ time (`Orrery.Projects`):
 ```
 
 * `root` is the directory everything is relative to; `~` is expanded.
+
 * Each entry in `groups` is a **project** (the page calls them projects; the
   key keeps its historical name). `dir` is a directory under `root`, and
   every git working tree directly inside it is a repository of that project.
   Cloning a new repository into the directory is all it takes to add it.
+
 * A project with a `repos` list covers exactly those paths (relative to
   `root`) instead of scanning its directory. Use this for a catch-all
   project like "Other".
+
 * `exclude` lists paths (relative to `root`) never to show: vendored
   upstream sources, data checkouts, GitHub organisation profile repositories.
+
 * Projects are shown alphabetically; a project named `Other` is always last.
 
 `ORRERY_PROJECTS=/path/to/projects.exs` points the running service at a
@@ -270,14 +277,18 @@ CSS and JavaScript inline so the same template renders the static file.
   template; "Needs attention" by `ATTENTION`; "Upcoming" by `UPCOMING`. An
   entry is `{ label, cls, cell: r => node }`. Adding a column is adding an
   entry; the data available to `cell` is one repository from `data.json`.
+
 * **Filter chips** are the `FILTERS` array: `{ key, label, test: r => bool }`.
+
 * **Release-state labels** are `STATE_LABEL` and `STATES`.
+
 * **Signals** ("flags") are computed server-side in
   `Orrery.Collector.flags/1`, one `flag(condition, severity, category,
   message)` per line; `:warn` puts a repository in "Needs attention", `:info`
   shows only in its detail. Add a new signal there, and a test in
   `test/dashboard/collector_flags_test.exs`, which builds throwaway
   repositories under the system temp directory.
+
 * **Summary tiles** read `report.summary`, computed in
   `Orrery.Collector.summarise/1`.
 
@@ -310,18 +321,23 @@ the variables, and `Orrery.Store.default_data_dir/0`.
   no token, or the token is not in the environment of the process running
   the server (a token set in an interactive shell profile is not seen by a
   launchd or systemd service). Cached responses still fill in.
+
 * **A repository shows "Never released" but is on hex:** the clone has not
   fetched since the release. The dashboard says so ("hex has vX but the
   newest local tag is …") and flags it as needing a pull.
+
 * **A tag exists but the dashboard says the version is not tagged:** the tag
   points at a commit not in the branch's history (a rebased-away release
   commit). The warning names the commit; `git tag -f` it onto the branch.
+
 * **A repository is missing:** check `omitted` in `/data.json`. Forks and
   archived repositories are left out unless their `STATUS.md` says
   otherwise; paths in `exclude` never appear.
+
 * **Changes to the registry do not show:** the running service collects on
   its schedule; press Refresh, or restart (the registry being newer than the
   saved report triggers an immediate collection).
+
 * **The page stops rendering after a template change:** open the browser
   console; a JavaScript error in the inline script blanks the page. Run
   `node --check` on the script as above.

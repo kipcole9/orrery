@@ -59,6 +59,7 @@ parser is built for:
 * `TODO.md` has five sections — `## Open`, `## In progress`, `## Blocked`,
   `## Deferred`, `## Done` — and one checkbox bullet per item. `[x]` is done;
   `[ ]` takes the state of its section. Nothing else marks state.
+
 * A `plans/` document opens with `**Status:** state, date`, shown verbatim.
   It counts nothing unless it has a `## Tasks` checkbox list or a table with a
   `Status` column.
