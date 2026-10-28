@@ -22,6 +22,8 @@ Orrery is for a maintainer with many related repositories checked out side by si
 
 * **A static page too** — `mix orrery.collect` writes the same page as a self-contained HTML file that opens from disk with no server.
 
+* **GitHub releases from tags** — `mix orrery.releases` finds every version tag with no GitHub release and creates one from the tag's `CHANGELOG.md` section, titled as the repository's earlier releases are.
+
 ## Supported Elixir and OTP versions
 
 Orrery requires **Elixir 1.20+** and **Erlang/OTP 27+**. Earlier Elixir releases are not supported. It also needs `git` on the `PATH`.
@@ -132,6 +134,30 @@ It writes `data.json` and a self-contained `orrery.html`. The options are:
 * **`--open`** — open the page when it is written.
 
 * **`--quiet`** — no progress output.
+
+## GitHub releases
+
+A version tag pushed to origin with no GitHub release is found by:
+
+```bash
+mix orrery.releases
+```
+
+It lists, for each repository in the registry, the tags written `v` and a semantic version (`v2.1.1`, `v1.0.0-rc.7`) that have no release, with the title and notes each would get, and changes nothing. With `--create` it creates them, oldest version first:
+
+```bash
+mix orrery.releases --create
+```
+
+* **Notes** are the tag's section of `CHANGELOG.md`, read at the tag, from its `##` heading to the next: every common heading shape is read (`## [v2.1.1] — 2026-10-28`, `## 1.4.3`, `## v0.6.0 (2026-09-10)`). A tag with no section is listed and never released with empty notes.
+
+* **Titles** follow the repository's earlier releases (`Localize Phone Number version 0.2.0`), else the `:name` in `mix.exs`.
+
+* **Latest** goes only to the highest stable version, and only when it is among those created, so a backfill never moves it back. A pre-release becomes a GitHub pre-release.
+
+* **Skipped**, with the reason: a repository whose origin is not on GitHub, that the `gh` login cannot write to, that is archived, or that is a fork its `STATUS.md` does not claim.
+
+The options are `--only NAME` and `--repo PATH` (each repeatable) to narrow the run, and `--notes` to print each release's notes in full. It needs the GitHub CLI [`gh`](https://cli.github.com), logged in as someone who can create releases.
 
 ## Development
 
