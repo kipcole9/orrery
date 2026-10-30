@@ -32,6 +32,7 @@ defmodule OrreryWeb.Router do
     pipe_through :page_api
 
     post "/refresh", OrreryController, :refresh
+    post "/releases", OrreryController, :releases
   end
 
   scope "/", OrreryWeb do

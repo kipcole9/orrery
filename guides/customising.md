@@ -169,7 +169,7 @@ PHX_SERVER=true SECRET_KEY_BASE=$(mix phx.gen.secret) \
   _build/prod/rel/orrery/bin/orrery start
 ```
 
-Orrery has no authentication of its own. It is meant to run on a workstation or behind something that already authenticates; do not expose it directly on the public internet, because `POST /refresh` lets anyone trigger collections against your GitHub budget.
+Orrery has no authentication of its own. It is meant to run on a workstation or behind something that already authenticates; do not expose it directly on the public internet, because `POST /refresh` lets anyone trigger collections against your GitHub budget and `POST /releases` lets anyone create GitHub releases with your `gh` login.
 
 ## HTTP API
 
@@ -177,9 +177,10 @@ Orrery has no authentication of its own. It is meant to run on a workstation or 
 |---|---|
 | `GET /` | the page |
 | `GET /data.json` | the full report, as the page receives it |
-| `GET /api/status` | `ready`, `refreshing`, `refreshing_repo`, `generated_at`, `next_refresh_at`, `schedule`, `last_error` |
+| `GET /api/status` | `ready`, `refreshing`, `refreshing_repo`, `releasing_repo`, `last_releases`, `generated_at`, `next_refresh_at`, `schedule`, `last_error` |
 | `POST /refresh` | full collection; `202` with the status; needs the CSRF token the page carries |
 | `POST /refresh` with `repo=<path>` | one repository, by its path relative to `root` |
+| `POST /releases` with `repo=<path>` | creates the GitHub releases that repository's newest hex releases are missing, then collects it; `422` when the report has no such repository or nothing is missing |
 
 Elixir code in the same VM can subscribe with `Orrery.Store.subscribe/0` and receive `{:orrery, :refreshed, status}` after each collection.
 
@@ -214,6 +215,8 @@ The OTP application is `:orrery` with modules under `Orrery` and `OrreryWeb`, th
 * **A repository shows "Never released" but is on hex:** the clone has not fetched since the release. Orrery says so ("hex has vX but the newest local tag is …") and flags it as needing a pull.
 
 * **A tag exists but Orrery says the version is not tagged:** the tag points at a commit not in the branch's history (a rebased-away release commit). The warning names the commit; `git tag -f` it onto the branch.
+
+* **"vX.Y.Z on hex but not released on GitHub":** one of the package's two newest hex releases has no GitHub release for its tag. The tag button beside the repository's refresh button creates it from the tag's `CHANGELOG.md` section through the GitHub CLI `gh`, which must be logged in as someone who can create releases on the repository; the footer reports what was created. A version whose tag was never pushed gets no release: push the tag and press the button again.
 
 * **A repository is missing:** check `omitted` in `/data.json`. Forks and archived repositories are left out unless their `STATUS.md` says otherwise; a clone under a GitHub owner not in `owners` is left out; paths in `exclude` never appear.
 

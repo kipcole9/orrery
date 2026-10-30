@@ -187,6 +187,32 @@ defmodule Orrery.Releases do
     end)
   end
 
+  @doc """
+  The planned releases for the given versions.
+
+  ### Arguments
+
+  * `releases` is a list of planned releases, each with a `:version`, as
+    `plan/2` or `Orrery.Releases.Gh.missing/1` return them.
+
+  * `versions` is the versions wanted, without their `v`.
+
+  ### Returns
+
+  * The releases whose version is in `versions`, in their original order.
+
+  ### Examples
+
+      iex> planned = [%{tag: "v1.0.0", version: "1.0.0"}, %{tag: "v1.1.0", version: "1.1.0"}]
+      iex> Orrery.Releases.for_versions(planned, ["1.1.0", "2.0.0"])
+      [%{tag: "v1.1.0", version: "1.1.0"}]
+
+  """
+  @spec for_versions([map()], [String.t()]) :: [map()]
+  def for_versions(releases, versions) when is_list(releases) and is_list(versions) do
+    Enum.filter(releases, &(&1.version in versions))
+  end
+
   defp tagged_version(tag) do
     case version(tag) do
       {:ok, version} -> [{tag, version}]

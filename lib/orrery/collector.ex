@@ -437,10 +437,53 @@ defmodule Orrery.Collector do
       github_error: github_error,
       owner: owner_repo && elem(owner_repo, 0),
       repo_url: owner_repo && "https://github.com/#{elem(owner_repo, 0)}/#{elem(owner_repo, 1)}",
-      issue_summary: issue_summary(github)
+      issue_summary: issue_summary(github),
+      missing_releases: missing_releases(hex, github)
     }
 
     Map.put(base, :pull, pull(base))
+  end
+
+  @doc """
+  The recent hex releases that have no GitHub release.
+
+  Only hex's two newest releases are checked, each against the tag
+  `v<version>`. Nothing is reported when the package is not on hex or
+  GitHub's releases could not be fetched.
+
+  ### Arguments
+
+  * `hex` is the package's hex state from `Orrery.Hex.fetch/2`, or `nil`.
+
+  * `github` is the repository's GitHub state from `Orrery.GitHub.fetch/3`,
+    or `nil`.
+
+  ### Returns
+
+  * The versions without a release, newest first; `[]` when none is missing
+    or the question could not be asked.
+
+  ### Examples
+
+      iex> hex = %{published: true, recent: ["1.2.0", "1.1.0"]}
+      iex> Orrery.Collector.missing_releases(hex, %{release_tags: ["v1.1.0", "v1.0.0"]})
+      ["1.2.0"]
+      iex> Orrery.Collector.missing_releases(hex, %{release_tags: nil})
+      []
+      iex> Orrery.Collector.missing_releases(%{published: false, recent: []}, %{release_tags: []})
+      []
+      iex> Orrery.Collector.missing_releases(hex, nil)
+      []
+
+  """
+  @spec missing_releases(map() | nil, map() | nil) :: [String.t()]
+  def missing_releases(%{published: true, recent: recent}, %{release_tags: tags})
+      when is_list(recent) and is_list(tags) do
+    Enum.reject(recent, &("v#{&1}" in tags))
+  end
+
+  def missing_releases(_hex, _github) do
+    []
   end
 
   # Whether the clone needs pulling, and the strongest reason it does: origin's
@@ -881,6 +924,12 @@ defmodule Orrery.Collector do
         "release",
         "not published on hex"
       ),
+      flag(
+        releases? and repo.missing_releases != [],
+        :warn,
+        "release",
+        "#{versions(repo.missing_releases)} on hex but not released on GitHub"
+      ),
       flag(repo.hex_error != nil, :info, "hex", repo.hex_error),
       ci_flag(repo),
       flag(status not in [:active, :unknown], :info, "status", Orrery.Status.label(status)),
@@ -896,6 +945,13 @@ defmodule Orrery.Collector do
   end
 
   defp archived?(repo), do: repo.github != nil and repo.github.archived == true
+
+  # "v1.2.0", "v1.2.0 and v1.1.0", for a flag naming the versions.
+  defp versions(versions) do
+    versions
+    |> Enum.map(&"v#{&1}")
+    |> Enum.join(" and ")
+  end
 
   defp blocker_flags(%{blocked: %{blockers: blockers}}) do
     Enum.map(blockers, fn blocker ->

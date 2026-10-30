@@ -18,6 +18,12 @@ defmodule Orrery.Store do
   a successful collection and `{:orrery, :refresh_failed, status}` after a
   failed one, where `status` is the map returned by `status/0`.
 
+  `create_releases/1` creates the GitHub releases a repository's recent hex
+  releases are missing, through the GitHub CLI, and then collects that
+  repository again so the report reflects them. `:releaser` names the
+  module whose `create_missing/2` does the creating; it defaults to
+  `Orrery.Releases.Gh` and exists so tests can substitute one.
+
   ## Configuration
 
       config :orrery, Orrery.Store,
@@ -49,6 +55,8 @@ defmodule Orrery.Store do
             raw: nil,
             json: nil,
             refreshing_repo: nil,
+            releasing_repo: nil,
+            last_releases: nil,
             generated_at: nil,
             task: nil,
             collecting_since: nil,
@@ -60,12 +68,24 @@ defmodule Orrery.Store do
             data_dir: nil,
             collect_on_start: true,
             collector: Orrery.Collector,
-            collector_options: []
+            collector_options: [],
+            releaser: Orrery.Releases.Gh
+
+  @typedoc "What the last `create_releases/1` did, as `status/0` reports it."
+  @type releases :: %{
+          repo: String.t(),
+          created: [String.t()],
+          failed: [%{tag: String.t(), reason: String.t()}],
+          untagged: [String.t()],
+          error: String.t() | nil
+        }
 
   @type status :: %{
           ready: boolean(),
           refreshing: boolean(),
           refreshing_repo: String.t() | nil,
+          releasing_repo: String.t() | nil,
+          last_releases: releases() | nil,
           generated_at: String.t() | nil,
           next_refresh_at: String.t() | nil,
           last_error: String.t() | nil,
@@ -99,6 +119,9 @@ defmodule Orrery.Store do
   * `:collector` is the module whose `collect/1` produces a report.
 
   * `:collector_options` are passed through to the collector.
+
+  * `:releaser` is the module whose `create_missing/2` creates GitHub
+    releases. Defaults to `Orrery.Releases.Gh`.
 
   ### Returns
 
@@ -184,6 +207,34 @@ defmodule Orrery.Store do
   end
 
   @doc """
+  Creates the GitHub releases a repository's recent hex releases are missing,
+  then collects that repository again.
+
+  The versions are the report's `missing_releases` for the repository, so
+  nothing is created that the report does not show as missing. The outcome
+  is reported in `status/0` as `:last_releases`.
+
+  ### Arguments
+
+  * `path` is the repository's path relative to the registry root, as shown
+    in the report.
+
+  ### Returns
+
+  * `:started`, or `:already_running` when a collection or another release
+    is in flight, or
+
+  * `{:error, :unknown_repo}` when the report has no such repository, or
+    `{:error, :nothing_missing}` when it is missing no release.
+
+  """
+  @spec create_releases(GenServer.server(), String.t()) ::
+          :started | :already_running | {:error, :unknown_repo | :nothing_missing}
+  def create_releases(server \\ __MODULE__, path) when is_binary(path) do
+    GenServer.call(server, {:create_releases, path})
+  end
+
+  @doc """
   Subscribes the calling process to refresh notifications.
 
   ### Returns
@@ -219,7 +270,8 @@ defmodule Orrery.Store do
       data_dir: Path.expand(Keyword.get(options, :data_dir) || default_data_dir()),
       collect_on_start: Keyword.get(options, :collect_on_start, true),
       collector: Keyword.get(options, :collector, Orrery.Collector),
-      collector_options: Keyword.get(options, :collector_options, [])
+      collector_options: Keyword.get(options, :collector_options, []),
+      releaser: Keyword.get(options, :releaser, Orrery.Releases.Gh)
     }
 
     {:ok, load_persisted(state), {:continue, :schedule}}
@@ -365,6 +417,17 @@ defmodule Orrery.Store do
   def handle_call({:refresh_repo, path}, _from, state),
     do: {:reply, :started, start_repo_collection(state, path)}
 
+  def handle_call({:create_releases, _path}, _from, %{task: task} = state) when task != nil,
+    do: {:reply, :already_running, state}
+
+  def handle_call({:create_releases, path}, _from, state) do
+    case missing_releases(state.raw, path) do
+      {:ok, []} -> {:reply, {:error, :nothing_missing}, state}
+      {:ok, versions} -> {:reply, :started, start_releases(state, path, versions)}
+      :error -> {:reply, {:error, :unknown_repo}, state}
+    end
+  end
+
   @impl true
   def handle_info(:scheduled_refresh, %{task: nil} = state) do
     {:noreply, start_collection(%{state | timer: nil})}
@@ -372,9 +435,23 @@ defmodule Orrery.Store do
 
   def handle_info(:scheduled_refresh, state), do: {:noreply, %{state | timer: nil}}
 
+  def handle_info({ref, result}, %{task: %Task{ref: ref}, releasing_repo: path} = state)
+      when is_binary(path) do
+    Process.demonitor(ref, [:flush])
+    {:noreply, finish_releases(result, state)}
+  end
+
   def handle_info({ref, result}, %{task: %Task{ref: ref}} = state) do
     Process.demonitor(ref, [:flush])
     {:noreply, finish(result, state)}
+  end
+
+  def handle_info(
+        {:DOWN, ref, :process, _pid, reason},
+        %{task: %Task{ref: ref}, releasing_repo: path} = state
+      )
+      when is_binary(path) do
+    {:noreply, finish_releases({:error, Exception.format_exit(reason)}, state)}
   end
 
   def handle_info({:DOWN, ref, :process, _pid, reason}, %{task: %Task{ref: ref}} = state) do
@@ -432,6 +509,73 @@ defmodule Orrery.Store do
         next_refresh_at: nil
     }
   end
+
+  # ------------------------------------------------------------------
+  # Releases
+  # ------------------------------------------------------------------
+
+  # The versions the report shows as missing a GitHub release, or :error
+  # when the report (in the collector's own form) has no such repository.
+  defp missing_releases(nil, _path) do
+    :error
+  end
+
+  defp missing_releases(raw, path) do
+    repos = Enum.flat_map(raw.groups, & &1.repos)
+
+    case Enum.find(repos, &(&1.path == path)) do
+      %{missing_releases: versions} -> {:ok, versions}
+      nil -> :error
+    end
+  end
+
+  defp start_releases(state, path, versions) do
+    releaser = state.releaser
+    directory = Path.join(state.raw.root, path)
+    Logger.info("orrery: creating GitHub releases for #{path}: #{Enum.join(versions, ", ")}")
+
+    task =
+      Task.Supervisor.async_nolink(Orrery.TaskSupervisor, fn ->
+        releaser.create_missing(directory, versions)
+      end)
+
+    %{state | task: task, releasing_repo: path, last_releases: nil}
+  end
+
+  # Whatever the outcome, the repository is collected again so the report
+  # shows the releases that now exist; the outcome itself goes to status.
+  defp finish_releases(result, %{releasing_repo: path} = state) do
+    outcome = releases_outcome(path, result)
+    Logger.info("orrery: releases for #{path}: #{describe_releases(outcome)}")
+
+    state = %{state | task: nil, releasing_repo: nil, last_releases: outcome}
+    start_repo_collection(state, path)
+  end
+
+  defp releases_outcome(path, {:ok, outcome}) do
+    Map.merge(%{repo: path, error: nil}, outcome)
+  end
+
+  defp releases_outcome(path, {status, reason}) when status in [:skip, :error] do
+    %{repo: path, created: [], failed: [], untagged: [], error: reason}
+  end
+
+  defp releases_outcome(path, other) do
+    %{repo: path, created: [], failed: [], untagged: [], error: inspect(other, limit: 5)}
+  end
+
+  defp describe_releases(%{error: error}) when is_binary(error) do
+    "not created: " <> error
+  end
+
+  defp describe_releases(outcome) do
+    "#{length(outcome.created)} created, #{length(outcome.failed)} not created, " <>
+      "#{length(outcome.untagged)} without a tag on origin"
+  end
+
+  # ------------------------------------------------------------------
+  # Collection results
+  # ------------------------------------------------------------------
 
   # A single repository comes back as a repo map and is spliced into the raw
   # report; the result is then handled exactly like a full report.
@@ -589,6 +733,8 @@ defmodule Orrery.Store do
       ready: state.json != nil,
       refreshing: state.task != nil,
       refreshing_repo: state.refreshing_repo,
+      releasing_repo: state.releasing_repo,
+      last_releases: state.last_releases,
       generated_at: state.generated_at && DateTime.to_iso8601(state.generated_at),
       next_refresh_at: state.next_refresh_at && DateTime.to_iso8601(state.next_refresh_at),
       last_error: state.last_error,

@@ -222,6 +222,9 @@
       }
       .rowbtn:hover { background: var(--surface-2); color: var(--ink); }
       .rowbtn:disabled { cursor: progress; opacity: .6; }
+      .rowbtns { display: inline-flex; gap: 4px; }
+      .rowbtn-release { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 40%, transparent); }
+      .rowbtn-release svg { display: block; width: 13px; height: 13px; }
       /* In "Needs attention" the flags take the room and the name stays tight. */
       table.repos .c-proj { font-weight: 570; white-space: nowrap; }
       table.repos .c-msgs { white-space: normal; font-size: 12.5px; color: var(--ink-2); width: 100%; min-width: 280px; }
@@ -669,12 +672,23 @@
 
         const parts = [`Generated ${DATA.generated_at} from ${DATA.root}.`];
         if (STATUS.next_refresh_at) parts.push(`Next automatic collection at ${new Date(STATUS.next_refresh_at).toLocaleString()}.`);
+        if (STATUS.last_releases) parts.push(releasesOutcome(STATUS.last_releases));
         if (gh.enabled && gh.remaining !== null && gh.remaining !== undefined) {
           parts.push(`GitHub: ${gh.calls} requests this run, ${gh.remaining} remaining in the window` +
             (gh.token_var ? ` (token from $${gh.token_var}).` : "."));
         }
         parts.push("Plan progress is read from plan documents; documents written as prose are listed but not counted.");
         $("#footer").textContent = parts.join(" ");
+      }
+
+      // One sentence on what the last "create releases" did, for the footer.
+      function releasesOutcome(o) {
+        if (o.error) return `GitHub releases for ${o.repo} were not created: ${o.error}.`;
+        const bits = [];
+        if (o.created.length) bits.push(`created ${o.created.join(", ")}`);
+        for (const f of o.failed) bits.push(`${f.tag} not created (${f.reason})`);
+        if (o.untagged.length) bits.push(`no tag on origin for v${o.untagged.join(", v")}`);
+        return `GitHub releases for ${o.repo}: ${bits.join("; ") || "nothing to do"}.`;
       }
 
       function renderTiles() {
@@ -895,16 +909,34 @@
           title: r.pull && r.pull.remote_checked ? "up to date with origin" : "origin not asked" });
       }
 
-      // "Refresh this one": collects just that repository again.
+      // "Refresh this one": collects just that repository again. Beside it,
+      // when hex has a release GitHub does not, "release": creates the
+      // missing GitHub release(s) and then collects the repository again.
       function rowRefreshButton(r) {
         if (!SERVED) return null;
         const b = el("button", { class: "rowbtn", type: "button", title: `Collect ${r.name} again now`, text: "\u21bb" });
+        b.dataset.idle = b.innerHTML;
         b.addEventListener("click", e => {
           e.stopPropagation();
           b.disabled = true; b.textContent = "\u2026";
           requestRefresh({ repo: r.path });
         });
-        return b;
+        const missing = r.missing_releases || [];
+        if (!missing.length) return b;
+        const versions = missing.map(v => "v" + v).join(" and ");
+        const release = el("button", {
+          class: "rowbtn rowbtn-release", type: "button",
+          title: `Create the GitHub release for ${versions} of ${r.name} from its changelog`,
+          "aria-label": `Create the GitHub release for ${versions} of ${r.name}`
+        }, icon("tag"));
+        release.dataset.idle = release.innerHTML;
+        release.addEventListener("click", e => {
+          e.stopPropagation();
+          release.disabled = true; release.textContent = "\u2026";
+          b.disabled = true;
+          requestReleases({ repo: r.path });
+        });
+        return el("span", { class: "rowbtns" }, [release, b]);
       }
 
       function repoTable(list) {
@@ -1347,7 +1379,7 @@
               header.disabled = false; header.textContent = "Refresh";
               if (status.last_error) header.title = `Last collection failed: ${status.last_error}`;
             }
-            for (const b of document.querySelectorAll(".rowbtn[disabled]")) { b.disabled = false; b.textContent = "\u21bb"; }
+            for (const b of document.querySelectorAll(".rowbtn[disabled]")) { b.disabled = false; b.innerHTML = b.dataset.idle || "\u21bb"; }
           } catch (_error) {
             setTimeout(tick, 5000);
           }
@@ -1355,9 +1387,9 @@
         tick();
       }
 
-      async function requestRefresh(body) {
+      async function post(url, body) {
         try {
-          await fetch("/refresh", {
+          await fetch(url, {
             method: "POST",
             headers: { accept: "application/json", "content-type": "application/json", "x-csrf-token": csrf },
             body: JSON.stringify(body || {})
@@ -1365,6 +1397,9 @@
         } catch (_error) { /* the poll reports the outcome */ }
         setTimeout(pollThenReload, 1500);
       }
+
+      const requestRefresh = body => post("/refresh", body);
+      const requestReleases = body => post("/releases", body);
 
       if (SERVED) {
         const header = $("#refresh");

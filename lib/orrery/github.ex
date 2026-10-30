@@ -108,7 +108,7 @@ defmodule Orrery.GitHub do
   end
 
   @doc """
-  Collects the open issues and pull requests for `owner/repo`.
+  Collects the open issues, pull requests and release tags for `owner/repo`.
 
   Returns `{:ok, map}` or `{:error, reason}`; a repository that has been made
   private, renamed or deleted reports `:not_found` rather than failing the run.
@@ -136,8 +136,22 @@ defmodule Orrery.GitHub do
          open_pr_count: length(prs),
          issues: Enum.map(issues, &issue/1),
          prs: Enum.map(prs, &pull_request/1),
-         ci: latest_run(owner, repo, meta["default_branch"], cache_dir)
+         ci: latest_run(owner, repo, meta["default_branch"], cache_dir),
+         release_tags: release_tags(owner, repo, cache_dir)
        }}
+    end
+  end
+
+  # The tags of the repository's newest hundred GitHub releases, or nil when
+  # they could not be fetched: a missing release is a signal, never a reason
+  # to fail a repo, and nil says the question could not be asked.
+  defp release_tags(owner, repo, cache_dir) do
+    case get_json("/repos/#{owner}/#{repo}/releases?per_page=100", cache_dir) do
+      {:ok, releases} when is_list(releases) ->
+        for %{"tag_name" => tag} <- releases, is_binary(tag), do: tag
+
+      _other ->
+        nil
     end
   end
 

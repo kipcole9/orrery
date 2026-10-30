@@ -7,6 +7,9 @@ defmodule OrreryWeb.OrreryController do
 
   * `POST /refresh` starts a collection now and returns `202 Accepted`.
 
+  * `POST /releases` creates the GitHub releases a repository's recent hex
+    releases are missing, then collects it again, and returns `202 Accepted`.
+
   * `GET /api/status` reports whether a collection is running, when the
     report was generated and when the next one is due.
 
@@ -53,6 +56,32 @@ defmodule OrreryWeb.OrreryController do
     result = Store.refresh()
     send_json(conn, 202, %{result: result, status: Store.status()})
   end
+
+  @doc """
+  Creates a repository's missing GitHub releases and answers `202 Accepted`
+  with the current status.
+
+  The `repo` parameter is a path as the report shows it; the store looks it
+  up in the report, so the value is never used as a filesystem path here.
+  A repository the report does not have, or one missing no release, answers
+  `422` with an `error`.
+  """
+  def releases(conn, %{"repo" => path}) when is_binary(path) and byte_size(path) in 1..200 do
+    case Store.create_releases(path) do
+      {:error, reason} ->
+        send_json(conn, 422, %{error: releases_error(reason), repo: path, status: Store.status()})
+
+      result ->
+        send_json(conn, 202, %{result: result, repo: path, status: Store.status()})
+    end
+  end
+
+  def releases(conn, _params) do
+    send_json(conn, 422, %{error: "repo is required", status: Store.status()})
+  end
+
+  defp releases_error(:unknown_repo), do: "no such repository in the report"
+  defp releases_error(:nothing_missing), do: "no GitHub release is missing"
 
   @doc "Returns the store's status."
   def status(conn, _params) do

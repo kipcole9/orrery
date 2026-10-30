@@ -10,9 +10,11 @@ defmodule Orrery.Releases.Gh do
   that has not fetched the tag reads it all the same.
 
   `missing/1` plans a repository's missing releases with
-  `Orrery.Releases.plan/2`, each with its title and its notes, and
-  `create/2` creates one. Every function returns an error or skip tuple
-  rather than raising when `git` or `gh` fails.
+  `Orrery.Releases.plan/2`, each with its title and its notes, `create/2`
+  creates one, and `create_missing/2` creates those for a list of versions,
+  which is what the dashboard's release button does. Every function
+  returns an error or skip tuple rather than raising when `git` or `gh`
+  fails.
 
   """
 
@@ -34,6 +36,13 @@ defmodule Orrery.Releases.Gh do
 
   @typedoc "What `missing/1` found for one repository."
   @type found :: %{path: Path.t(), slug: String.t(), releases: [entry()]}
+
+  @typedoc "What `create_missing/2` did: the tags created, the tags not created with the reason, and the versions with no tag on origin."
+  @type outcome :: %{
+          created: [String.t()],
+          failed: [%{tag: String.t(), reason: String.t()}],
+          untagged: [String.t()]
+        }
 
   @doc """
   The releases a repository's tags are missing.
@@ -104,6 +113,56 @@ defmodule Orrery.Releases.Gh do
 
   def create(_slug, %{notes: {:error, _reason}}) do
     {:error, "no CHANGELOG section for this version"}
+  end
+
+  @doc """
+  Creates the missing releases for the given versions of a repository.
+
+  The releases are planned with `missing/1`, so a version whose tag is not
+  on origin, or already has a release, is not created; each of the rest is
+  created with `create/2`, oldest first.
+
+  ### Arguments
+
+  * `path` is the path of a git working tree whose origin is on GitHub.
+
+  * `versions` is the versions to release, without their `v`.
+
+  ### Returns
+
+  * `{:ok, outcome}`, a `t:outcome/0`,
+
+  * `{:skip, reason}` or `{:error, reason}`, as `missing/1` returns them.
+
+  """
+  @spec create_missing(Path.t(), [String.t()]) ::
+          {:ok, outcome()} | {:skip, String.t()} | {:error, String.t()}
+  def create_missing(path, versions) when is_binary(path) and is_list(versions) do
+    with {:ok, %{slug: slug, releases: releases}} <- missing(path) do
+      wanted = Releases.for_versions(releases, versions)
+      planned = Enum.map(wanted, & &1.version)
+
+      outcome =
+        Enum.reduce(wanted, %{created: [], failed: [], untagged: []}, fn entry, outcome ->
+          record(outcome, entry, create(slug, entry))
+        end)
+
+      {:ok, %{outcome | untagged: Enum.reject(versions, &(&1 in planned))}}
+    end
+  end
+
+  defp record(outcome, entry, :ok) do
+    %{outcome | created: outcome.created ++ [entry.tag]}
+  end
+
+  defp record(outcome, entry, {:error, reason}) do
+    %{outcome | failed: outcome.failed ++ [%{tag: entry.tag, reason: first_line(reason)}]}
+  end
+
+  defp first_line(text) do
+    text
+    |> String.split("\n")
+    |> hd()
   end
 
   defp written(file, notes) do

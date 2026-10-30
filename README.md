@@ -22,7 +22,7 @@ Orrery is for a maintainer with many related repositories checked out side by si
 
 * **A static page too** — `mix orrery.collect` writes the same page as a self-contained HTML file that opens from disk with no server.
 
-* **GitHub releases from tags** — `mix orrery.releases` finds every version tag with no GitHub release and creates one from the tag's `CHANGELOG.md` section, titled as the repository's earlier releases are.
+* **GitHub releases from tags** — `mix orrery.releases` finds every version tag with no GitHub release and creates one from the tag's `CHANGELOG.md` section, titled as the repository's earlier releases are. The page warns when either of a package's two newest hex releases has no GitHub release, and a button beside the repository's refresh button creates it the same way.
 
 ## Supported Elixir and OTP versions
 
@@ -113,6 +113,7 @@ Orrery has no authentication of its own. Run it on a workstation or behind somet
 | `GET /api/status` | Whether a collection is running, when the report was made and when the next is due. |
 | `POST /refresh` | Starts a full collection and answers `202`. Needs the CSRF token the page carries. |
 | `POST /refresh` with `repo=<path>` | Collects one repository again and splices it into the report. |
+| `POST /releases` with `repo=<path>` | Creates the GitHub releases the repository's newest hex releases are missing, through `gh`, then collects it again. |
 
 Elixir code in the same VM can call `Orrery.Store.subscribe/0` to receive `{:orrery, :refreshed, status}` after each collection.
 

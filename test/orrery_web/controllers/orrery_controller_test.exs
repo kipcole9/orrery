@@ -142,6 +142,31 @@ defmodule OrreryWeb.OrreryControllerRepoRefreshTest do
     assert Enum.any?(repos, &(&1["path"] == "stub/one"))
   end
 
+  test "POST /releases refuses a repository the report does not have", %{conn: conn} do
+    :ok = Store.subscribe()
+    if match?({:error, _}, Store.latest_json()), do: Store.refresh()
+
+    if match?({:error, _}, Store.latest_json()),
+      do: assert_receive({:orrery, :refreshed, _}, 5_000)
+
+    conn =
+      conn
+      |> put_req_header("accept", "application/json")
+      |> put_req_header("content-type", "application/json")
+      |> post(~p"/releases", JSON.encode!(%{repo: "stub/nowhere"}))
+
+    assert %{"error" => "no such repository in the report", "repo" => "stub/nowhere"} =
+             json_response(conn, 422)
+
+    conn =
+      build_conn()
+      |> put_req_header("accept", "application/json")
+      |> put_req_header("content-type", "application/json")
+      |> post(~p"/releases", "{}")
+
+    assert %{"error" => "repo is required"} = json_response(conn, 422)
+  end
+
   test "an absurd repo value is refused before reaching the store", %{conn: conn} do
     conn =
       conn

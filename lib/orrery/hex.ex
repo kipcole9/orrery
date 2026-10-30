@@ -20,6 +20,7 @@ defmodule Orrery.Hex do
           latest: String.t() | nil,
           latest_at: String.t() | nil,
           releases: non_neg_integer(),
+          recent: [String.t()],
           retired: [String.t()],
           downloads: non_neg_integer() | nil,
           url: String.t() | nil
@@ -87,6 +88,9 @@ defmodule Orrery.Hex do
   @doc """
   Reduces a hex package payload to the fields the dashboard uses.
 
+  `:recent` is the two newest releases, newest first, by the time hex
+  received them; they are the releases checked for a GitHub release.
+
   ### Arguments
 
   * `payload` is the decoded JSON from `GET /api/packages/:name`.
@@ -106,7 +110,7 @@ defmodule Orrery.Hex do
       ...>   "retirements" => %{"1.6.3" => %{"reason" => "security"}},
       ...>   "downloads" => %{"all" => 12}
       ...> })
-      %{published: true, name: "tempo", latest: "1.6.4", latest_at: "2026-08-16T10:00:00Z", releases: 2, retired: ["1.6.3"], downloads: 12, url: "https://hex.pm/packages/tempo"}
+      %{published: true, name: "tempo", latest: "1.6.4", latest_at: "2026-08-16T10:00:00Z", releases: 2, recent: ["1.7.0-rc.1", "1.6.4"], retired: ["1.6.3"], downloads: 12, url: "https://hex.pm/packages/tempo"}
 
   """
   @spec summarise(map()) :: t()
@@ -125,6 +129,7 @@ defmodule Orrery.Hex do
       latest: latest,
       latest_at: latest_at,
       releases: length(releases),
+      recent: recent(releases),
       retired: payload["retirements"] |> map_keys() |> Enum.sort(),
       downloads: get_in(payload, ["downloads", "all"]),
       url: payload["html_url"]
@@ -134,6 +139,16 @@ defmodule Orrery.Hex do
   defp map_keys(%{} = map), do: Map.keys(map)
   defp map_keys(_), do: []
 
+  # The two newest releases by `inserted_at`, which hex lists newest first
+  # anyway; a release without a version or a time is left out.
+  defp recent(releases) do
+    releases
+    |> Enum.filter(&(is_map(&1) and is_binary(&1["version"])))
+    |> Enum.sort_by(&to_string(&1["inserted_at"]), :desc)
+    |> Enum.take(2)
+    |> Enum.map(& &1["version"])
+  end
+
   defp unpublished(package) do
     %{
       published: false,
@@ -141,6 +156,7 @@ defmodule Orrery.Hex do
       latest: nil,
       latest_at: nil,
       releases: 0,
+      recent: [],
       retired: [],
       downloads: nil,
       url: nil

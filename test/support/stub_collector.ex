@@ -84,6 +84,7 @@ defmodule Orrery.StubCollector do
       owner: nil,
       repo_url: nil,
       issue_summary: nil,
+      missing_releases: [],
       pull: %{
         needed: false,
         reason: nil,
@@ -125,4 +126,22 @@ defmodule Orrery.UnknownRepoCollector do
 
   def collect(options), do: Orrery.ScriptedCollector.collect(options)
   def collect_one(path, _options), do: {:error, {:unknown_repo, path}}
+end
+
+defmodule Orrery.StubReleaser do
+  @moduledoc "A releaser that reports every version it is given as created, without touching GitHub."
+
+  @doc "Returns the tags for `versions` as created."
+  def create_missing(_path, versions) do
+    {:ok, %{created: Enum.map(versions, &"v#{&1}"), failed: [], untagged: []}}
+  end
+end
+
+defmodule Orrery.FailingReleaser do
+  @moduledoc "A releaser whose `gh` is never logged in."
+
+  @doc "Fails, as `Orrery.Releases.Gh.create_missing/2` does when `gh` refuses."
+  def create_missing(_path, _versions) do
+    {:error, "gh: not logged in"}
+  end
 end
