@@ -59,9 +59,11 @@
   ],
 
   # Paths relative to :root that should never appear on the dashboard.
-  # Vendored upstream sources, generated data and the GitHub organisation
-  # profile repositories (the `.github` clones) live here.
+  # Vendored upstream sources, generated data, the GitHub organisation
+  # profile repositories (the `.github` clones) and retired libraries live
+  # here. timetable was renamed to agenda.
   exclude: [
+    "tempo/timetable",
     "localize/icu",
     "localize/elixir-localize",
     "unicode/elixir-unicode",
