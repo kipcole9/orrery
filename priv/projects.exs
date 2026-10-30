@@ -61,9 +61,15 @@
   # Paths relative to :root that should never appear on the dashboard.
   # Vendored upstream sources, generated data, the GitHub organisation
   # profile repositories (the `.github` clones) and retired libraries live
-  # here. timetable was renamed to agenda.
+  # here. timetable was renamed to agenda; image_models holds model files;
+  # localize_research_probe is a scratch project; ortex and ical are forks
+  # whose origins are under our organisations, so :owners keeps them.
   exclude: [
     "tempo/timetable",
+    "image/image_models",
+    "localize/localize_research_probe",
+    "image/ortex",
+    "tempo/ical",
     "localize/icu",
     "localize/elixir-localize",
     "unicode/elixir-unicode",
