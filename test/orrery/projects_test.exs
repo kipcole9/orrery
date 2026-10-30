@@ -25,6 +25,23 @@ defmodule Orrery.ProjectsTest do
     refute String.starts_with?(root, "~")
   end
 
+  test ":owners is optional, and must be a list of strings when present" do
+    file = write(~s(%{root: "/x", groups: [%{name: "A", dir: "a"}], owners: ["me", "us"]}))
+    assert {:ok, %{owners: ["me", "us"]}} = Projects.load(file)
+
+    file = write(~s(%{root: "/x", groups: [%{name: "A", dir: "a"}]}))
+    assert {:ok, registry} = Projects.load(file)
+    refute Map.has_key?(registry, :owners)
+
+    file = write(~s(%{root: "/x", groups: [%{name: "A", dir: "a"}], owners: "me"}))
+    assert {:error, {:invalid, message}} = Projects.load(file)
+    assert message =~ ":owners"
+
+    file = write(~s(%{root: "/x", groups: [%{name: "A", dir: "a"}], owners: [:me]}))
+    assert {:error, {:invalid, message}} = Projects.load(file)
+    assert message =~ ":owners"
+  end
+
   test "a file that is not a registry is rejected without raising" do
     assert {:error, {:invalid, message}} = Projects.load(write("[1, 2, 3]"))
     assert message =~ "expected a map"

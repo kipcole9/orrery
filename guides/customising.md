@@ -40,6 +40,7 @@ The registry is `priv/projects.exs`, an Elixir map evaluated at collection time 
 ```elixir
 %{
   root: "~/Development",
+  owners: ["kipcole9", "elixir-localize"],
   groups: [
     %{name: "Localize", dir: "localize", blurb: "CLDR-backed localisation"},
     %{name: "Other", dir: ".", blurb: "Repositories that belong to no project", repos: ["astro", "url"]}
@@ -53,6 +54,8 @@ The registry is `priv/projects.exs`, an Elixir map evaluated at collection time 
 * Each entry in `groups` is a **project** (the page calls them projects; the key keeps its historical name). `dir` is a directory under `root`, and every git working tree directly inside it is a repository of that project. Cloning a new repository into the directory is all it takes to add it.
 
 * A project with a `repos` list covers exactly those paths (relative to `root`) instead of scanning its directory. Use this for a catch-all project like "Other".
+
+* `owners` lists the GitHub users and organisations whose repositories belong on the dashboard. A clone whose `origin` (or `upstream`) is on GitHub under any other owner is left out and listed under `omitted` in the report, so an upstream checked out for reference or a dependency being debugged never needs naming in `exclude`. A clone with no remote, or one not on GitHub, is kept. Leave `owners` out to keep every working tree.
 
 * `exclude` lists paths (relative to `root`) never to show: vendored upstream sources, data checkouts, GitHub organisation profile repositories.
 
@@ -212,7 +215,7 @@ The OTP application is `:orrery` with modules under `Orrery` and `OrreryWeb`, th
 
 * **A tag exists but Orrery says the version is not tagged:** the tag points at a commit not in the branch's history (a rebased-away release commit). The warning names the commit; `git tag -f` it onto the branch.
 
-* **A repository is missing:** check `omitted` in `/data.json`. Forks and archived repositories are left out unless their `STATUS.md` says otherwise; paths in `exclude` never appear.
+* **A repository is missing:** check `omitted` in `/data.json`. Forks and archived repositories are left out unless their `STATUS.md` says otherwise; a clone under a GitHub owner not in `owners` is left out; paths in `exclude` never appear.
 
 * **Changes to the registry do not show:** the running service collects on its schedule; press Refresh, or restart (the registry being newer than the saved report triggers an immediate collection).
 

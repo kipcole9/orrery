@@ -45,6 +45,7 @@ The registry in `priv/projects.exs` says which repositories to cover. The one in
 ```elixir
 %{
   root: "~/Development",
+  owners: ["kipcole9", "elixir-localize"],
   groups: [
     %{name: "Localize", dir: "localize", blurb: "CLDR-backed localisation"},
     %{name: "Other", dir: ".", blurb: "Repositories that belong to no project", repos: ["astro", "url"]}
@@ -53,7 +54,7 @@ The registry in `priv/projects.exs` says which repositories to cover. The one in
 }
 ```
 
-Each entry in `groups` is a project: every git working tree inside its `dir` is picked up automatically, or exactly the paths in `repos` when that key is present. Paths in `exclude` never appear.
+Each entry in `groups` is a project: every git working tree inside its `dir` is picked up automatically, or exactly the paths in `repos` when that key is present. `owners` names the GitHub users and organisations whose repositories belong on the dashboard, so an upstream checked out alongside your own is left out. Paths in `exclude` never appear.
 
 Then start the server with a GitHub token in the environment:
 

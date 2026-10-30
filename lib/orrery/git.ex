@@ -294,12 +294,27 @@ defmodule Orrery.Git do
     end
   end
 
-  # ------------------------------------------------------------------
+  @doc """
+  Returns the URL of the clone's `origin`, falling back to `upstream`.
 
-  defp remote(path) do
+  Reads the clone's configuration only; nothing is fetched.
+
+  ### Arguments
+
+  * `path` is the repository directory.
+
+  ### Returns
+
+  * The remote URL as a string, or `nil` when the clone has neither remote.
+
+  """
+  @spec remote(Path.t()) :: String.t() | nil
+  def remote(path) do
     one(path, ~w[config --get remote.origin.url]) ||
       one(path, ~w[config --get remote.upstream.url])
   end
+
+  # ------------------------------------------------------------------
 
   defp default_branch(path) do
     case one(path, ~w[symbolic-ref --quiet refs/remotes/origin/HEAD]) do

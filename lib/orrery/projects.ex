@@ -7,7 +7,10 @@ defmodule Orrery.Projects do
   default. Each group names a directory under the root; every git working tree
   inside it is picked up automatically, so adding a project means cloning it
   into the right place. A group may instead pin an explicit `:repos` list, and
-  `:exclude` removes repositories by their path relative to the root.
+  `:exclude` removes repositories by their path relative to the root. An
+  `:owners` list names the GitHub users and organisations whose repositories
+  belong on the dashboard: a clone whose remote is under any other owner is
+  left out.
 
   The file to read is `:projects_file` in the `:orrery` application
   environment, or the `ORRERY_PROJECTS` environment variable at runtime.
@@ -23,7 +26,8 @@ defmodule Orrery.Projects do
   @type registry :: %{
           required(:root) => String.t(),
           required(:groups) => [group()],
-          optional(:exclude) => [String.t()]
+          optional(:exclude) => [String.t()],
+          optional(:owners) => [String.t()]
         }
 
   @doc """
@@ -55,7 +59,7 @@ defmodule Orrery.Projects do
   * `{:error, {:missing_file, path}}` when the file does not exist.
 
   * `{:error, {:invalid, message}}` when the file does not evaluate to a
-    registry map.
+    registry map, or `:owners` is not a list of strings.
 
   ### Examples
 
@@ -82,15 +86,12 @@ defmodule Orrery.Projects do
 
   defp validate(%{root: root, groups: groups} = registry)
        when is_binary(root) and is_list(groups) do
-    case Enum.reject(groups, &valid_group?/1) do
-      [] ->
-        {:ok,
-         registry
-         |> Map.put(:root, Path.expand(root))
-         |> Map.put_new(:exclude, [])}
-
-      [bad | _] ->
-        {:error, {:invalid, "group without a :name and :dir: #{inspect(bad)}"}}
+    with :ok <- validate_groups(groups),
+         :ok <- validate_owners(registry[:owners]) do
+      {:ok,
+       registry
+       |> Map.put(:root, Path.expand(root))
+       |> Map.put_new(:exclude, [])}
     end
   end
 
@@ -98,8 +99,35 @@ defmodule Orrery.Projects do
     {:error, {:invalid, "expected a map with :root and :groups, got #{inspect(other)}"}}
   end
 
+  defp validate_groups(groups) do
+    case Enum.reject(groups, &valid_group?/1) do
+      [] -> :ok
+      [bad | _] -> {:error, {:invalid, "group without a :name and :dir: #{inspect(bad)}"}}
+    end
+  end
+
   defp valid_group?(%{name: name, dir: dir}) when is_binary(name) and is_binary(dir), do: true
   defp valid_group?(_), do: false
+
+  defp validate_owners(nil) do
+    :ok
+  end
+
+  defp validate_owners(owners) when is_list(owners) do
+    if Enum.all?(owners, &is_binary/1) do
+      :ok
+    else
+      invalid_owners(owners)
+    end
+  end
+
+  defp validate_owners(other) do
+    invalid_owners(other)
+  end
+
+  defp invalid_owners(value) do
+    {:error, {:invalid, "expected :owners to be a list of strings, got #{inspect(value)}"}}
+  end
 
   @doc """
   Restricts a registry to the named groups.

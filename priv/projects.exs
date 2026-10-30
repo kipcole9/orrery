@@ -10,9 +10,15 @@
 # report format is unchanged). To pin a project to an explicit set of
 # repositories rather than everything in a directory, give it a :repos list of
 # paths relative to :root. To leave a repository out, add its path to :exclude.
+#
+# Only our own repositories belong here. :owners names the GitHub users and
+# organisations they live under; a clone whose remote is under anyone else
+# (an upstream checked out for reference, a dependency being debugged) is left
+# out without having to be named in :exclude.
 
 %{
   root: "~/Development",
+  owners: ["kipcole9", "elixir-localize", "elixir-unicode", "elixir-image", "elixir-tempo", "ex-money"],
   groups: [
     %{
       name: "Unicode",
@@ -61,6 +67,7 @@
     "unicode/elixir-unicode",
     "image/elixir_image",
     "money/elixir-money",
+    "tempo/elixir-tempo",
     "localize/messageformat.dev",
     "localize/name-dataset",
     "image/libvips",

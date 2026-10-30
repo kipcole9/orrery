@@ -10,11 +10,25 @@ defmodule Orrery.Collector do
   A repository is any directory inside a group directory that is a git working
   tree. Adding a project therefore means cloning it into the right group — no
   edit to the registry is needed. `:exclude` removes one by its path relative
-  to the root.
+  to the root, and `:owners` keeps only the clones whose GitHub remote belongs
+  to one of the listed users or organisations. A clone with no remote cannot
+  belong to anyone else, so `:owners` leaves it alone.
+
+  ### Arguments
+
+  * `registry` is a registry from `Orrery.Projects.load/1`.
+
+  ### Returns
+
+  * A map with `:root`, `:groups` (each with its `:paths`, groups with none
+    left out) and `:omitted`, the repositories `:owners` rejected, each with
+    its `:path`, `:name` and `:reason`.
+
   """
   def discover(registry) do
     root = Path.expand(registry.root)
     excluded = MapSet.new(registry[:exclude] || [])
+    owners = registry[:owners]
 
     groups =
       Enum.map(registry.groups, fn group ->
@@ -30,7 +44,9 @@ defmodule Orrery.Collector do
               |> Enum.sort()
 
             names ->
-              names |> Enum.map(&Path.join(root, &1)) |> Enum.filter(&git_repo?/1)
+              names
+              |> Enum.map(&Path.join(root, &1))
+              |> Enum.filter(&git_repo?/1)
           end
 
         repos =
@@ -38,10 +54,45 @@ defmodule Orrery.Collector do
             MapSet.member?(excluded, Path.relative_to(path, root))
           end)
 
-        Map.put(group, :paths, repos)
+        {kept, foreign} = Enum.split_with(repos, &owned?(&1, owners))
+
+        group
+        |> Map.put(:paths, kept)
+        |> Map.put(:foreign, Enum.map(foreign, &foreign_omission(&1, root)))
       end)
 
-    %{root: root, groups: Enum.reject(groups, &(&1.paths == []))}
+    omitted = Enum.flat_map(groups, & &1.foreign)
+
+    groups =
+      groups
+      |> Enum.reject(&(&1.paths == []))
+      |> Enum.map(&Map.delete(&1, :foreign))
+
+    %{root: root, groups: groups, omitted: omitted}
+  end
+
+  # With no :owners every clone is kept. Otherwise a clone whose remote is on
+  # GitHub must be under a listed owner; a clone with no remote, or one that
+  # is not on GitHub, is kept, since no other owner can be named for it.
+  defp owned?(_path, nil) do
+    true
+  end
+
+  defp owned?(path, owners) do
+    case Orrery.Git.owner_repo(Orrery.Git.remote(path)) do
+      {owner, _repo} -> owner in owners
+      nil -> true
+    end
+  end
+
+  defp foreign_omission(path, root) do
+    {owner, _repo} = Orrery.Git.owner_repo(Orrery.Git.remote(path))
+
+    %{
+      path: Path.relative_to(path, root),
+      name: Path.basename(path),
+      reason: "owned by #{owner} on GitHub, who is not in the registry's :owners"
+    }
   end
 
   defp git_repo?(path) do
@@ -185,7 +236,7 @@ defmodule Orrery.Collector do
   origin for its HEAD with `git ls-remote`) and `:on_progress`.
   """
   def run(registry, options \\ []) do
-    %{root: root, groups: groups} = discover(registry)
+    %{root: root, groups: groups, omitted: omitted} = discover(registry)
     context = context(options)
     github? = context.github?
     progress = Keyword.get(options, :on_progress, fn _ -> :ok end)
@@ -244,7 +295,7 @@ defmodule Orrery.Collector do
       end)
 
     repos = Enum.reject(repos, &match?({:error, _}, &1))
-    assemble(root, groups, repos, failures, [], github?)
+    assemble(root, groups, repos, failures, omitted, github?)
   end
 
   # Everything derived from the collected repositories: omission, blockers,
